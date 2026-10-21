@@ -1,0 +1,20 @@
+[
+  {
+    "phone": "000",
+    "dob": "01/01/1990",
+    "name": "Quản Trò (Admin)",
+    "role": "admin"
+  },
+  {
+    "phone": "0987654321",
+    "dob": "15/08/2005",
+    "name": "Nguyễn Văn A",
+    "role": "player"
+  },
+  {
+    "phone": "0123456789",
+    "dob": "20/10/2005",
+    "name": "Trần Thị B",
+    "role": "player"
+  }
+]
