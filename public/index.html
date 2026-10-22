@@ -7,7 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="/socket.io/socket.io.js"></script>
 
-    <!-- Favicon chuông -->
+    <!-- Favicon hình chuông -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔔</text></svg>">
     
     <!-- Font Montserrat -->
@@ -23,19 +23,19 @@
 </head>
 <body class="bg-gray-100 text-gray-800 font-sans">
 
-    <!-- MÀN HÌNH ĐĂNG NHẬP (Đã sửa lỗi form) -->
+    <!-- MÀN HÌNH ĐĂNG NHẬP -->
     <div id="login-screen" class="min-h-screen flex items-center justify-center">
-        <div class="bg-white p-8 rounded shadow-lg max-w-sm w-full">
+        <!-- Đã bọc form và thêm lệnh chặn reload event.preventDefault() -->
+        <form onsubmit="event.preventDefault(); login();" class="bg-white p-8 rounded shadow-lg max-w-sm w-full">
             <h2 class="text-2xl font-bold mb-6 text-center text-gray-800">ĐĂNG NHẬP</h2>
-            <!-- Thay div bằng form và dùng onsubmit -->
-            <form onsubmit="handleLoginSubmit(event)" class="mb-4">
+            <div class="mb-4">
                 <label class="block text-gray-700 text-sm font-bold mb-2">Tên của bạn</label>
-                <input type="text" id="username" placeholder="Nhập tên..." class="w-full border p-3 rounded focus:outline-none focus:border-blue-500 mb-4" required />
-                <button type="submit" class="w-full bg-blue-600 text-white font-bold py-3 rounded hover:bg-blue-700 transition-colors">
-                    Vào
-                </button>
-            </form>
-        </div>
+                <input type="text" id="username" placeholder="Nhập tên..." class="w-full border p-3 rounded focus:outline-none focus:border-blue-500" required autocomplete="off" />
+            </div>
+            <button type="submit" class="w-full bg-blue-600 text-white font-bold py-3 rounded hover:bg-blue-700 transition-colors">
+                Vào phòng
+            </button>
+        </form>
     </div>
 
     <!-- MÀN HÌNH CHÍNH GAME -->
@@ -145,9 +145,7 @@
         let localTimerInterval = null;
         let currentRenderedOptions = ""; 
 
-        // Hàm xử lý đăng nhập qua form mới
-        function handleLoginSubmit(event) {
-            event.preventDefault(); // Ngăn trình duyệt tải lại trang
+        function login() {
             const name = document.getElementById('username').value.trim();
             if (!name) return alert('Vui lòng nhập tên của bạn!');
             socket.emit('login', name);
@@ -379,4 +377,48 @@
         }
 
         function renderAdminQueue(queue) {
-            const ul = document.getElementById
+            const ul = document.getElementById('admin-queue');
+            const textBox = document.getElementById('admin-text-box');
+            ul.innerHTML = '';
+            
+            if(queue.length === 0) {
+                ul.innerHTML = '<li class="text-gray-500 italic">Chưa có ai bấm chuông.</li>';
+                return;
+            }
+            
+            let textData = [];
+            queue.forEach((q, index) => {
+                const li = document.createElement('li');
+                li.className = "p-3 bg-gray-50 rounded border-l-4 border-blue-500 flex flex-col";
+                li.innerHTML = `
+                    <div class="flex justify-between font-bold text-lg">
+                        <span>#${index + 1} - ${q.name}</span>
+                        <span class="text-green-600">${q.time}s</span>
+                    </div>
+                    ${q.answer ? `<div class="text-red-600 font-bold mt-1 text-xl tracking-wider">Đáp án: ${q.answer}</div>` : ''}
+                `;
+                ul.appendChild(li);
+
+                if (currentGameState.mode !== 'buzzer_only' || q.answer !== "") {
+                    textData.push(`${q.name}, ${q.answer}, ${q.time}`);
+                } else {
+                    textData.push(`${q.name}, ${q.time}`);
+                }
+            });
+
+            textBox.value = textData.join('\n');
+        }
+
+        function renderPlayerQueue(queue) {
+            const ul = document.getElementById('player-queue');
+            ul.innerHTML = '';
+            queue.forEach((q, index) => {
+                const li = document.createElement('li');
+                li.className = "text-gray-700 p-2 bg-gray-50 rounded border mb-1 flex justify-between";
+                li.innerHTML = `<span><strong>#${index + 1}</strong>: ${q.name}</span> <span>${q.time}s</span>`;
+                ul.appendChild(li);
+            });
+        }
+    </script>
+</body>
+</html>
