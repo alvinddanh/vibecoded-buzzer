@@ -10,20 +10,28 @@ const io = new Server(server);
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
-// Trạng thái chung của hệ thống
 let gameState = {
     isLocked: true,
     mode: 'buzzer_only',
     queue: [],
     unlockedAt: null, 
     endTime: null,
-    allowedOptions: 'ABCD' // <-- MẶC ĐỊNH LÀ A, B, C, D
+    allowedOptions: 'ABCD'
 };
 
 let lockTimeout = null;
 
+// Hàm hỗ trợ để luôn gửi kèm thời gian thực của server
+function broadcastState(target = io) {
+    target.emit('state_update', { 
+        ...gameState, 
+        serverTime: Date.now() 
+    });
+}
+
 io.on('connection', (socket) => {
-    socket.emit('state_update', gameState);
+    // Gửi state riêng cho người vừa kết nối
+    broadcastState(socket);
 
     socket.on('login', (name) => {
         if (name === "admin000") {
@@ -42,7 +50,7 @@ io.on('connection', (socket) => {
                 if (data.allowedOptions) gameState.allowedOptions = data.allowedOptions;
                 gameState.queue = [];
                 break;
-            case 'update_options': // <-- SỰ KIỆN MỚI: Cập nhật phím động
+            case 'update_options': 
                 gameState.allowedOptions = data.allowedOptions;
                 break;
             case 'toggle_lock':
@@ -62,14 +70,15 @@ io.on('connection', (socket) => {
                 gameState.queue = [];
                 gameState.unlockedAt = Date.now();
                 gameState.endTime = gameState.unlockedAt + durationMs;
+                
                 clearTimeout(lockTimeout);
                 lockTimeout = setTimeout(() => {
                     gameState.isLocked = true;
-                    io.emit('state_update', gameState);
+                    broadcastState(); // Khóa xong thì báo cho mọi người
                 }, durationMs);
                 break;
         }
-        io.emit('state_update', gameState);
+        broadcastState(); // Cập nhật sau mọi hành động của admin
     });
 
     socket.on('buzz', (playerData) => {
@@ -87,7 +96,7 @@ io.on('connection', (socket) => {
                 time: timeTaken
             });
             gameState.queue.sort((a, b) => parseFloat(a.time) - parseFloat(b.time));
-            io.emit('state_update', gameState);
+            broadcastState();
         }
     });
 });
