@@ -7,26 +7,24 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// Phục vụ các file tĩnh trong thư mục public
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
-// Trạng thái chung của hệ thống chuông
+// Trạng thái chung của hệ thống
 let gameState = {
     isLocked: true,
     mode: 'buzzer_only',
     queue: [],
     unlockedAt: null, 
-    endTime: null     
+    endTime: null,
+    allowedOptions: 'ABCD' // <-- MẶC ĐỊNH LÀ A, B, C, D
 };
 
 let lockTimeout = null;
 
 io.on('connection', (socket) => {
-    // Gửi trạng thái hiện tại cho người vừa kết nối
     socket.emit('state_update', gameState);
 
-    // Xử lý đăng nhập bằng Tên
     socket.on('login', (name) => {
         if (name === "admin000") {
             socket.emit('login_success', { role: 'admin', name: name });
@@ -37,19 +35,20 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Xử lý các lệnh từ Quản trò
     socket.on('admin_action', (data) => {
         switch (data.action) {
             case 'change_mode':
                 gameState.mode = data.mode;
+                if (data.allowedOptions) gameState.allowedOptions = data.allowedOptions;
                 gameState.queue = [];
+                break;
+            case 'update_options': // <-- SỰ KIỆN MỚI: Cập nhật phím động
+                gameState.allowedOptions = data.allowedOptions;
                 break;
             case 'toggle_lock':
                 gameState.isLocked = data.isLocked;
                 clearTimeout(lockTimeout);
-                
                 if (!gameState.isLocked) {
-                    // Nếu mở khóa thủ công, bắt đầu tính giờ
                     gameState.unlockedAt = Date.now();
                     gameState.endTime = null;
                 }
@@ -63,10 +62,7 @@ io.on('connection', (socket) => {
                 gameState.queue = [];
                 gameState.unlockedAt = Date.now();
                 gameState.endTime = gameState.unlockedAt + durationMs;
-                
                 clearTimeout(lockTimeout);
-                
-                // Tự động khóa khi hết giờ
                 lockTimeout = setTimeout(() => {
                     gameState.isLocked = true;
                     io.emit('state_update', gameState);
@@ -76,27 +72,21 @@ io.on('connection', (socket) => {
         io.emit('state_update', gameState);
     });
 
-    // Xử lý khi người chơi bấm chuông
     socket.on('buzz', (playerData) => {
         if (gameState.isLocked) return;
         
-        // Kiểm tra xem người chơi này (theo tên) đã bấm chuông chưa
         const alreadyBuzzed = gameState.queue.find(p => p.name === playerData.name);
         if (!alreadyBuzzed) {
             let timeTaken = "0.00";
             if (gameState.unlockedAt) {
                 timeTaken = ((Date.now() - gameState.unlockedAt) / 1000).toFixed(2);
             }
-
             gameState.queue.push({
                 name: playerData.name,
                 answer: playerData.answer || '',
                 time: timeTaken
             });
-
-            // Sắp xếp danh sách từ nhanh nhất đến chậm nhất
             gameState.queue.sort((a, b) => parseFloat(a.time) - parseFloat(b.time));
-            
             io.emit('state_update', gameState);
         }
     });

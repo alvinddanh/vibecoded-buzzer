@@ -12,7 +12,7 @@
     <!-- MÀN HÌNH ĐĂNG NHẬP -->
     <div id="login-screen" class="min-h-screen flex items-center justify-center">
         <div class="bg-white p-8 rounded shadow-lg max-w-sm w-full">
-            <h2 class="text-2xl font-bold mb-6 text-center text-gray-800">ĐĂNG NHẬP</h2>
+            <h2 class="text-2xl font-bold mb-6 text-center text-gray-800">Đăng Nhập</h2>
             <div class="mb-4">
                 <label class="block text-gray-700 text-sm font-bold mb-2">Tên của bạn</label>
                 <input type="text" id="username" onkeydown="if(event.key === 'Enter') login()" placeholder="Nhập tên..." class="w-full border p-3 rounded focus:outline-none focus:border-blue-500" required />
@@ -43,15 +43,26 @@
                 <h3 class="font-bold text-lg mb-4">Cài đặt câu hỏi</h3>
                 <select id="mode-select" class="w-full border p-2 rounded mb-4" onchange="changeMode()">
                     <option value="buzzer_only">Chỉ bấm chuông</option>
-                    <option value="answer_and_buzzer">Nhập đáp án & Bấm chuông</option>
+                    <option value="answer_and_buzzer">Nhập văn bản tự do</option>
+                    <option value="multiple_choice">Bảng phím động (Trắc nghiệm, Sắp xếp)</option>
                 </select>
+
+                <!-- KHU VỰC CẤU HÌNH PHÍM CHO ADMIN -->
+                <div id="dynamic-keys-setting" class="hidden mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <label class="block text-sm font-bold text-blue-800 mb-2">Phương án cho phép (Các phím xuất hiện):</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="allowed-options-input" placeholder="VD: ABCDEF hoặc 1432VYT" class="border p-2 rounded w-full uppercase focus:outline-none focus:border-blue-500 font-mono font-bold text-lg tracking-widest">
+                        <button onclick="updateOptions()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 rounded font-bold whitespace-nowrap transition-colors">Áp dụng</button>
+                    </div>
+                    <p class="text-xs text-blue-600 mt-2 italic">* Người chơi sẽ thấy chính xác các phím bạn nhập vào ô này.</p>
+                </div>
                 
                 <hr class="my-4">
                 
                 <h3 class="font-bold text-lg mb-4">Hẹn giờ</h3>
                 <div class="flex gap-2 mb-4">
                     <input type="number" id="timer-input" placeholder="Giây (vd: 10, 20)" class="border p-2 rounded w-full">
-                    <button onclick="startTimer()" class="bg-green-600 text-white px-4 rounded whitespace-nowrap">Bắt đầu</button>
+                    <button onclick="startTimer()" class="bg-green-600 text-white px-4 rounded whitespace-nowrap font-bold">Bắt đầu</button>
                 </div>
 
                 <hr class="my-4">
@@ -83,9 +94,26 @@
 
         <!-- BẢNG ĐIỀU KHIỂN DÀNH CHO NGƯỜI CHƠI -->
         <div id="player-panel" class="hidden flex flex-col items-center justify-center bg-white p-8 rounded shadow">
+            
             <div id="answer-container" class="w-full max-w-md hidden mb-8">
                 <label class="block text-lg font-bold mb-2 text-center">Nhập đáp án của bạn</label>
-                <input type="text" id="player-answer" onkeydown="handleEnter(event)" placeholder="Nhập đáp án..." class="w-full border-2 border-gray-300 p-4 rounded text-xl focus:border-blue-500 focus:outline-none text-center">
+                <input type="text" id="player-answer" onkeydown="handleEnter(event)" placeholder="Nhập văn bản..." class="w-full border-2 border-gray-300 p-4 rounded text-xl focus:border-blue-500 focus:outline-none text-center">
+            </div>
+
+            <!-- VÙNG BÀN PHÍM ĐỘNG -->
+            <div id="mc-container" class="w-full max-w-md hidden mb-8 bg-gray-50 p-4 rounded-xl border-2 border-dashed border-gray-300">
+                <label class="block text-lg font-bold mb-2 text-center text-gray-700">Chọn phương án</label>
+                
+                <input type="text" id="mc-display" readonly placeholder="Chưa chọn..." class="w-full border-2 border-gray-300 p-4 rounded-lg text-3xl font-bold tracking-[0.3em] focus:outline-none text-center bg-white text-blue-600 mb-4 shadow-inner">
+                
+                <!-- Khu vực tự động vẽ phím bấm -->
+                <div id="dynamic-keyboard" class="flex flex-wrap justify-center gap-3 mb-4">
+                    <!-- Javascript sẽ tự động thêm HTML nút vào đây -->
+                </div>
+                
+                <button onclick="clearMC()" class="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 rounded-lg text-lg active:scale-95 transition-all shadow">
+                    ✖ Xóa / Bấm lại
+                </button>
             </div>
 
             <button id="buzz-btn" onclick="sendBuzz()" class="w-64 h-64 rounded-full bg-gray-400 text-white text-4xl font-black shadow-[0_10px_0_rgb(107,114,128)] active:shadow-[0_0px_0_rgb(107,114,128)] active:translate-y-[10px] transition-all cursor-not-allowed" disabled>
@@ -104,27 +132,23 @@
         let currentUser = null;
         let currentGameState = null;
         let localTimerInterval = null;
+        
+        // Theo dõi bộ phím hiện tại để tránh vẽ lại giao diện nếu quản trò chưa đổi phím
+        let currentRenderedOptions = ""; 
 
         // XỬ LÝ ĐĂNG NHẬP
         function login() {
             const name = document.getElementById('username').value.trim();
-            if (!name) {
-                alert('Vui lòng nhập tên của bạn!');
-                return;
-            }
+            if (!name) return alert('Vui lòng nhập tên của bạn!');
             socket.emit('login', name);
         }
 
-        // KHI ĐĂNG NHẬP THÀNH CÔNG
         socket.on('login_success', (userData) => {
             currentUser = userData;
-            
-            // Đổi màn hình
             document.getElementById('login-screen').classList.add('hidden');
             document.getElementById('game-view').classList.remove('hidden');
             document.getElementById('user-name').innerText = currentUser.name;
             
-            // Phân quyền giao diện
             if (currentUser.role === 'admin') {
                 document.getElementById('user-role').innerText = 'QUẢN TRÒ';
                 document.getElementById('user-role').classList.replace('text-gray-500', 'text-red-600');
@@ -156,10 +180,7 @@
                 if (state.endTime) {
                     localTimerInterval = setInterval(() => {
                         let remain = (state.endTime - Date.now()) / 1000;
-                        if (remain <= 0) {
-                            remain = 0;
-                            clearInterval(localTimerInterval);
-                        }
+                        if (remain <= 0) { remain = 0; clearInterval(localTimerInterval); }
                         timerEl.innerText = remain.toFixed(2);
                     }, 30);
                 } else if (state.unlockedAt) {
@@ -170,20 +191,47 @@
                 }
             }
 
+            // XỬ LÝ GIAO DIỆN QUẢN TRÒ
             if (currentUser && currentUser.role === 'admin') {
                 document.getElementById('mode-select').value = state.mode;
+                document.getElementById('allowed-options-input').value = state.allowedOptions;
+                
+                // Hiển thị khung cài đặt phím nếu đang ở chế độ phím động
+                if (state.mode === 'multiple_choice') {
+                    document.getElementById('dynamic-keys-setting').classList.remove('hidden');
+                } else {
+                    document.getElementById('dynamic-keys-setting').classList.add('hidden');
+                }
+                
                 renderAdminQueue(state.queue);
             }
 
+            // XỬ LÝ GIAO DIỆN NGƯỜI CHƠI
             if (currentUser && currentUser.role === 'player') {
                 const btn = document.getElementById('buzz-btn');
                 const answerContainer = document.getElementById('answer-container');
+                const mcContainer = document.getElementById('mc-container');
                 const answerInput = document.getElementById('player-answer');
 
-                if (state.mode === 'answer_and_buzzer') answerContainer.classList.remove('hidden');
-                else answerContainer.classList.add('hidden');
+                // Điều hướng hiện container tương ứng với Mode
+                if (state.mode === 'answer_and_buzzer') {
+                    answerContainer.classList.remove('hidden');
+                    mcContainer.classList.add('hidden');
+                } else if (state.mode === 'multiple_choice') {
+                    mcContainer.classList.remove('hidden');
+                    answerContainer.classList.add('hidden');
+                    
+                    // VẼ BÀN PHÍM ĐỘNG THEO CHUỖI TỪ SERVER
+                    if (state.allowedOptions !== currentRenderedOptions) {
+                        renderDynamicKeyboard(state.allowedOptions);
+                        currentRenderedOptions = state.allowedOptions;
+                        document.getElementById('mc-display').value = ''; // Reset ô chọn khi bàn phím đổi
+                    }
+                } else {
+                    answerContainer.classList.add('hidden');
+                    mcContainer.classList.add('hidden');
+                }
 
-                // Kiểm tra bằng `name` thay vì `phone`
                 const hasBuzzed = state.queue.find(p => p.name === currentUser.name);
 
                 if (state.isLocked) {
@@ -211,32 +259,72 @@
             }
         });
 
+        // HÀM VẼ BÀN PHÍM TỰ ĐỘNG
+        function renderDynamicKeyboard(optionsString) {
+            const keyboard = document.getElementById('dynamic-keyboard');
+            keyboard.innerHTML = ''; // Xóa phím cũ
+            
+            // Xóa dấu cách, giữ nguyên chữ in hoa (Ví dụ: "a b C" -> "ABC")
+            const cleanOptions = optionsString.replace(/\s+/g, '').toUpperCase();
+            
+            for (let i = 0; i < cleanOptions.length; i++) {
+                const char = cleanOptions[i];
+                const btn = document.createElement('button');
+                // Nút tự động co giãn, dùng padding (px-4 py-3) để luôn đẹp dù 4 hay 10 nút
+                btn.className = "bg-white hover:bg-gray-100 border-b-4 border-gray-300 text-gray-800 font-bold px-5 py-3 min-w-[3.5rem] rounded-xl text-2xl active:border-b-0 active:translate-y-1 transition-all shadow-sm flex items-center justify-center";
+                btn.innerText = char;
+                btn.onclick = () => appendMC(char);
+                keyboard.appendChild(btn);
+            }
+        }
+
+        // CÁC HÀM CỦA ADMIN
+        function changeMode() { 
+            const mode = document.getElementById('mode-select').value;
+            const options = getCleanAdminOptions();
+            socket.emit('admin_action', { action: 'change_mode', mode: mode, allowedOptions: options }); 
+        }
+        
+        function updateOptions() {
+            const options = getCleanAdminOptions();
+            if (!options) return alert('Vui lòng nhập ít nhất 1 phương án!');
+            socket.emit('admin_action', { action: 'update_options', allowedOptions: options });
+        }
+
+        // Hàm giúp admin tự động lọc bỏ dấu cách thừa, in hoa và xoá trùng lặp (ví dụ "A A B" -> "AB")
+        function getCleanAdminOptions() {
+            const raw = document.getElementById('allowed-options-input').value.toUpperCase().replace(/\s+/g, '');
+            // Dùng Set để loại bỏ các ký tự bị gõ trùng (nhập AAC thì biến thành AC)
+            const clean = Array.from(new Set(raw.split(''))).join('');
+            document.getElementById('allowed-options-input').value = clean;
+            return clean || 'ABCD';
+        }
+
+        function toggleLock(isLocked) { socket.emit('admin_action', { action: 'toggle_lock', isLocked }); }
+        function clearQueue() { 
+            socket.emit('admin_action', { action: 'clear_queue' }); 
+            document.getElementById('admin-text-box').value = '';
+        }
+        function startTimer() {
+            const seconds = parseFloat(document.getElementById('timer-input').value);
+            if (!seconds || seconds <= 0) return alert('Vui lòng nhập số giây hợp lệ');
+            socket.emit('admin_action', { action: 'start_timer', seconds });
+        }
+
         function copyTextBox(btn) {
             const textBox = document.getElementById('admin-text-box');
             if (!textBox.value.trim()) return;
-            
             navigator.clipboard.writeText(textBox.value).then(() => {
                 const originalText = btn.innerText;
                 btn.innerText = 'Đã Copy!';
                 btn.classList.replace('bg-black', 'bg-green-600');
                 btn.classList.replace('hover:bg-gray-800', 'hover:bg-green-700');
-                
                 setTimeout(() => {
                     btn.innerText = originalText;
                     btn.classList.replace('bg-green-600', 'bg-black');
                     btn.classList.replace('hover:bg-green-700', 'hover:bg-gray-800');
                 }, 2000);
-            }).catch(err => alert('Trình duyệt của bạn chặn quyền copy: ' + err));
-        }
-
-        // CÁC HÀM CỦA ADMIN
-        function changeMode() { socket.emit('admin_action', { action: 'change_mode', mode: document.getElementById('mode-select').value }); }
-        function toggleLock(isLocked) { socket.emit('admin_action', { action: 'toggle_lock', isLocked }); }
-        function clearQueue() { socket.emit('admin_action', { action: 'clear_queue' }); }
-        function startTimer() {
-            const seconds = parseFloat(document.getElementById('timer-input').value);
-            if (!seconds || seconds <= 0) return alert('Vui lòng nhập số giây hợp lệ');
-            socket.emit('admin_action', { action: 'start_timer', seconds });
+            });
         }
 
         // CÁC HÀM CỦA NGƯỜI CHƠI
@@ -248,17 +336,37 @@
             }
         }
 
+        function appendMC(letter) {
+            if (currentGameState && currentGameState.isLocked) return;
+            const display = document.getElementById('mc-display');
+            if (!display.value.includes(letter)) {
+                display.value += letter;
+            }
+        }
+
+        function clearMC() {
+            if (currentGameState && currentGameState.isLocked) return;
+            document.getElementById('mc-display').value = '';
+        }
+
         function sendBuzz() {
             if (currentGameState.isLocked) return;
             const payload = { name: currentUser.name, answer: '' };
+            
             if (currentGameState.mode === 'answer_and_buzzer') {
                 const answer = document.getElementById('player-answer').value.trim();
                 if (!answer) return alert('Vui lòng nhập đáp án trước khi bấm chuông!');
                 payload.answer = answer;
+            } else if (currentGameState.mode === 'multiple_choice') {
+                const answer = document.getElementById('mc-display').value;
+                if (!answer) return alert('Vui lòng chọn ít nhất một phương án trước khi bấm chuông!');
+                payload.answer = answer;
             }
+            
             socket.emit('buzz', payload);
         }
 
+        // VẼ DANH SÁCH KẾT QUẢ
         function renderAdminQueue(queue) {
             const ul = document.getElementById('admin-queue');
             const textBox = document.getElementById('admin-text-box');
@@ -266,12 +374,10 @@
             
             if(queue.length === 0) {
                 ul.innerHTML = '<li class="text-gray-500 italic">Chưa có ai bấm chuông.</li>';
-                textBox.value = ''; 
                 return;
             }
             
             let textData = [];
-
             queue.forEach((q, index) => {
                 const li = document.createElement('li');
                 li.className = "p-3 bg-gray-50 rounded border-l-4 border-blue-500 flex flex-col";
@@ -284,7 +390,7 @@
                 `;
                 ul.appendChild(li);
 
-                if (currentGameState.mode === 'answer_and_buzzer' || q.answer !== "") {
+                if (currentGameState.mode !== 'buzzer_only' || q.answer !== "") {
                     textData.push(`${q.name}, ${q.answer}, ${q.time}`);
                 } else {
                     textData.push(`${q.name}, ${q.time}`);
