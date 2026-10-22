@@ -7,15 +7,14 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="/socket.io/socket.io.js"></script>
 
-    <!-- Dòng code chèn Emoji cái chuông làm Favicon -->
+    <!-- Favicon chuông -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔔</text></svg>">
     
-    <!-- 1. Nhúng font từ Google Fonts -->
+    <!-- Font Montserrat -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
 
-    <!-- 2. Ép toàn bộ trang web sử dụng font này -->
     <style>
         body {
             font-family: 'Montserrat', sans-serif !important;
@@ -24,17 +23,18 @@
 </head>
 <body class="bg-gray-100 text-gray-800 font-sans">
 
-    <!-- MÀN HÌNH ĐĂNG NHẬP -->
+    <!-- MÀN HÌNH ĐĂNG NHẬP (Đã sửa lỗi form) -->
     <div id="login-screen" class="min-h-screen flex items-center justify-center">
         <div class="bg-white p-8 rounded shadow-lg max-w-sm w-full">
             <h2 class="text-2xl font-bold mb-6 text-center text-gray-800">ĐĂNG NHẬP</h2>
-            <div class="mb-4">
+            <!-- Thay div bằng form và dùng onsubmit -->
+            <form onsubmit="handleLoginSubmit(event)" class="mb-4">
                 <label class="block text-gray-700 text-sm font-bold mb-2">Tên của bạn</label>
-                <input type="text" id="username" onkeydown="if(event.key === 'Enter') login()" placeholder="Nhập tên..." class="w-full border p-3 rounded focus:outline-none focus:border-blue-500" required />
-            </div>
-            <button onclick="login()" class="w-full bg-blue-600 text-white font-bold py-3 rounded hover:bg-blue-700 transition-colors">
-                Vào
-            </button>
+                <input type="text" id="username" placeholder="Nhập tên..." class="w-full border p-3 rounded focus:outline-none focus:border-blue-500 mb-4" required />
+                <button type="submit" class="w-full bg-blue-600 text-white font-bold py-3 rounded hover:bg-blue-700 transition-colors">
+                    Vào
+                </button>
+            </form>
         </div>
     </div>
 
@@ -112,13 +112,11 @@
                 <input type="text" id="player-answer" onkeydown="handleEnter(event)" placeholder="Nhập văn bản..." class="w-full border-2 border-gray-300 p-4 rounded text-xl focus:border-blue-500 focus:outline-none text-center">
             </div>
 
-            <!-- VÙNG BÀN PHÍM ĐỘNG -->
             <div id="mc-container" class="w-full max-w-md hidden mb-8 bg-gray-50 p-4 rounded-xl border-2 border-dashed border-gray-300">
                 <label class="block text-lg font-bold mb-2 text-center text-gray-700">Chọn phương án</label>
                 
                 <input type="text" id="mc-display" readonly placeholder="Chưa chọn..." class="w-full border-2 border-gray-300 p-4 rounded-lg text-3xl font-bold tracking-[0.3em] focus:outline-none text-center bg-white text-blue-600 mb-4 shadow-inner">
                 
-                <!-- Khu vực tự động vẽ phím bấm -->
                 <div id="dynamic-keyboard" class="flex flex-wrap justify-center gap-3 mb-4">
                     <!-- Javascript sẽ tự động thêm HTML nút vào đây -->
                 </div>
@@ -139,7 +137,7 @@
         </div>
     </div>
 
-    <!-- TOÀN BỘ LOGIC XỬ LÝ -->
+    <!-- LOGIC -->
     <script>
         const socket = io();
         let currentUser = null;
@@ -147,7 +145,9 @@
         let localTimerInterval = null;
         let currentRenderedOptions = ""; 
 
-        function login() {
+        // Hàm xử lý đăng nhập qua form mới
+        function handleLoginSubmit(event) {
+            event.preventDefault(); // Ngăn trình duyệt tải lại trang
             const name = document.getElementById('username').value.trim();
             if (!name) return alert('Vui lòng nhập tên của bạn!');
             socket.emit('login', name);
@@ -232,7 +232,7 @@
                     if (state.allowedOptions !== currentRenderedOptions) {
                         currentRenderedOptions = state.allowedOptions;
                         document.getElementById('mc-display').value = ''; 
-                        renderDynamicKeyboard(); // Vẽ lại phím
+                        renderDynamicKeyboard();
                     }
                 } else {
                     answerContainer.classList.add('hidden');
@@ -266,26 +266,21 @@
             }
         });
 
-        // HÀM VẼ BÀN PHÍM TỰ ĐỘNG - CÓ LOGIC KHÓA PHÍM ĐÃ BẤM
         function renderDynamicKeyboard() {
             const keyboard = document.getElementById('dynamic-keyboard');
             keyboard.innerHTML = ''; 
             const cleanOptions = currentRenderedOptions.replace(/\s+/g, '').toUpperCase();
             
-            // Lấy các phím đã được chọn
             const currentSelected = document.getElementById('mc-display').value;
 
             for (let i = 0; i < cleanOptions.length; i++) {
                 const char = cleanOptions[i];
                 const btn = document.createElement('button');
                 
-                // Nếu phím này ĐÃ ĐƯỢC BẤM -> Đổi màu xám, tạo cảm giác lún xuống và khóa lại
                 if (currentSelected.includes(char)) {
                     btn.className = "bg-gray-300 border-b-0 translate-y-1 text-gray-500 font-bold px-5 py-3 min-w-[3.5rem] rounded-xl text-2xl shadow-inner flex items-center justify-center cursor-not-allowed";
                     btn.disabled = true;
-                } 
-                // Nếu phím CHƯA BẤM -> Màu trắng nổi lên, cho phép bấm
-                else {
+                } else {
                     btn.className = "bg-white hover:bg-gray-100 border-b-4 border-gray-300 text-gray-800 font-bold px-5 py-3 min-w-[3.5rem] rounded-xl text-2xl active:border-b-0 active:translate-y-1 transition-all shadow-sm flex items-center justify-center";
                     btn.onclick = () => appendMC(char);
                 }
@@ -300,14 +295,14 @@
             const display = document.getElementById('mc-display');
             if (!display.value.includes(letter)) {
                 display.value += letter;
-                renderDynamicKeyboard(); // Gọi lại để khóa nút vừa bấm
+                renderDynamicKeyboard();
             }
         }
 
         function clearMC() {
             if (currentGameState && currentGameState.isLocked) return;
             document.getElementById('mc-display').value = '';
-            renderDynamicKeyboard(); // Gọi lại để mở khóa tất cả các nút
+            renderDynamicKeyboard();
         }
 
         function changeMode() { 
@@ -384,22 +379,4 @@
         }
 
         function renderAdminQueue(queue) {
-            const ul = document.getElementById('admin-queue');
-            const textBox = document.getElementById('admin-text-box');
-            ul.innerHTML = '';
-            
-            if(queue.length === 0) {
-                ul.innerHTML = '<li class="text-gray-500 italic">Chưa có ai bấm chuông.</li>';
-                return;
-            }
-            
-            let textData = [];
-            queue.forEach((q, index) => {
-                const li = document.createElement('li');
-                li.className = "p-3 bg-gray-50 rounded border-l-4 border-blue-500 flex flex-col";
-                li.innerHTML = `
-                    <div class="flex justify-between font-bold text-lg">
-                        <span>#${index + 1} - ${q.name}</span>
-                        <span class="text-green-600">${q.time}s</span>
-                    </div>
-                    ${q.answer ? `<div class="text-red-60
+            const ul = document.getElementById
