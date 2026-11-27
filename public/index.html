@@ -25,7 +25,6 @@
 
     <!-- MÀN HÌNH ĐĂNG NHẬP -->
     <div id="login-screen" class="min-h-screen flex items-center justify-center">
-        <!-- Đã bọc form và thêm lệnh chặn reload event.preventDefault() -->
         <form onsubmit="event.preventDefault(); login();" class="bg-white p-8 rounded shadow-lg max-w-sm w-full">
             <h2 class="text-2xl font-bold mb-6 text-center text-gray-800">ĐĂNG NHẬP</h2>
             <div class="mb-4">
@@ -39,7 +38,7 @@
     </div>
 
     <!-- MÀN HÌNH CHÍNH GAME -->
-    <div id="game-view" class="hidden min-h-screen p-6 max-w-4xl mx-auto">
+    <div id="game-view" class="hidden min-h-screen p-6 max-w-5xl mx-auto">
         <div class="flex justify-between items-center bg-white p-4 rounded shadow mb-6">
             <div>
                 <h1 class="text-xl font-bold text-gray-700">Xin chào, <span id="user-name" class="text-blue-600"></span></h1>
@@ -150,11 +149,11 @@
                 <p id="wav-file-status" class="text-xs text-gray-500 mt-2 truncate">Đang dùng: Âm thanh mặc định (Web Audio)</p>
             </div>
 
-            <!-- KẾT QUẢ CHO ADMIN -->
+            <!-- KẾT QUẢ & DANH SÁCH THAM GIA CHO ADMIN -->
             <div class="flex flex-col gap-4">
-                <div class="bg-white p-6 rounded shadow flex-1">
+                <div class="bg-white p-6 rounded shadow">
                     <h3 class="font-bold text-lg mb-4">Thứ tự bấm chuông</h3>
-                    <ul id="admin-queue" class="space-y-2 overflow-y-auto max-h-[250px]"></ul>
+                    <ul id="admin-queue" class="space-y-2 overflow-y-auto max-h-[220px]"></ul>
                 </div>
 
                 <div class="bg-white p-6 rounded shadow">
@@ -162,7 +161,18 @@
                         <h3 class="font-bold text-sm text-gray-600">Đoạn văn bản để Copy nhanh:</h3>
                         <button onclick="copyTextBox(this)" class="bg-black text-white text-xs px-3 py-1 rounded hover:bg-gray-800 transition-colors">Copy</button>
                     </div>
-                    <textarea id="admin-text-box" readonly class="w-full h-32 border-2 border-gray-200 p-3 rounded font-mono text-sm focus:outline-none bg-gray-50 resize-none" placeholder="Kết quả sẽ hiện ở đây..."></textarea>
+                    <textarea id="admin-text-box" readonly class="w-full h-28 border-2 border-gray-200 p-3 rounded font-mono text-sm focus:outline-none bg-gray-50 resize-none" placeholder="Kết quả sẽ hiện ở đây..."></textarea>
+                </div>
+
+                <!-- DANH SÁCH NGƯỜI ĐANG THAM GIA (ADMIN) -->
+                <div class="bg-white p-6 rounded shadow">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="font-bold text-lg">Danh sách đang tham gia</h3>
+                        <span id="admin-participants-count" class="bg-blue-100 text-blue-800 text-xs font-bold px-3 py-1 rounded-full">
+                            Tổng: 0 người
+                        </span>
+                    </div>
+                    <ul id="admin-participants-list" class="space-y-2 overflow-y-auto max-h-[220px] text-sm"></ul>
                 </div>
             </div>
         </div>
@@ -180,9 +190,7 @@
                 
                 <input type="text" id="mc-display" readonly placeholder="Chưa chọn..." class="w-full border-2 border-gray-300 p-4 rounded-lg text-3xl font-bold tracking-[0.3em] focus:outline-none text-center bg-white text-blue-600 mb-4 shadow-inner">
                 
-                <div id="dynamic-keyboard" class="flex flex-wrap justify-center gap-3 mb-4">
-                    <!-- Javascript sẽ tự động thêm HTML nút vào đây -->
-                </div>
+                <div id="dynamic-keyboard" class="flex flex-wrap justify-center gap-3 mb-4"></div>
                 
                 <button onclick="clearMC()" class="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 rounded-lg text-lg active:scale-95 transition-all shadow">
                     ✖ Xóa / Bấm lại
@@ -196,6 +204,15 @@
             <div class="mt-8 w-full max-w-md">
                 <h4 class="font-bold text-gray-600 mb-2 border-b pb-1">Trạng thái gửi:</h4>
                 <ul id="player-queue" class="text-sm space-y-1"></ul>
+            </div>
+
+            <!-- DANH SÁCH NGƯỜI ĐANG THAM GIA (NGƯỜI CHƠI) -->
+            <div class="mt-8 w-full max-w-md">
+                <div class="flex justify-between items-center mb-2 border-b pb-1">
+                    <h4 class="font-bold text-gray-600">Danh sách đang tham gia:</h4>
+                    <span id="player-participants-count" class="text-xs font-bold text-blue-600">Tổng: 0 người</span>
+                </div>
+                <ul id="player-participants-list" class="text-sm space-y-1 max-h-[180px] overflow-y-auto"></ul>
             </div>
         </div>
     </div>
@@ -216,8 +233,8 @@
         const WAV_NAME_KEY = 'admin_buzzer_wav_name';
 
         let audioCtx = null;
-        let customWavBuffer = null; // Pre-decoded AudioBuffer for instant playback
-        let adminSoundMode = localStorage.getItem(SOUND_MODE_KEY) || 'default'; // 'default' | 'none' | 'custom'
+        let customWavBuffer = null;
+        let adminSoundMode = localStorage.getItem(SOUND_MODE_KEY) || 'default';
         let customWavFileName = localStorage.getItem(WAV_NAME_KEY) || '';
 
         function getAudioContext() {
@@ -233,13 +250,11 @@
             return audioCtx;
         }
 
-        // Built-in synthesized buzzer sound using Web Audio API (no external file needed)
         function playDefaultBuiltinBuzzer() {
             const ctx = getAudioContext();
             if (!ctx) return;
 
             const now = ctx.currentTime;
-
             const osc1 = ctx.createOscillator();
             const osc2 = ctx.createOscillator();
             const gain = ctx.createGain();
@@ -280,7 +295,6 @@
         }
 
         function playBuzzerSound() {
-            // Strictly only for admin
             if (!currentUser || currentUser.role !== 'admin') return;
             if (adminSoundMode === 'none') return;
 
@@ -411,6 +425,95 @@
             }
         }
 
+        // ==========================================
+        // PARTICIPANTS LIST & LOGIN TIMESTAMP
+        // ==========================================
+        function formatLoginTime(timestamp) {
+            if (!timestamp) return '--:--:--';
+            const d = new Date(timestamp);
+            return d.toLocaleTimeString('vi-VN', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+        }
+
+        function escapeHtml(text) {
+            return String(text)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function renderParticipants(participants) {
+            const list = Array.isArray(participants) ? participants : [];
+            const totalCount = list.length;
+
+            const adminCountEl = document.getElementById('admin-participants-count');
+            const adminListEl = document.getElementById('admin-participants-list');
+            const playerCountEl = document.getElementById('player-participants-count');
+            const playerListEl = document.getElementById('player-participants-list');
+
+            if (adminCountEl) {
+                adminCountEl.innerText = `Tổng: ${totalCount} người`;
+            }
+            if (playerCountEl) {
+                playerCountEl.innerText = `Tổng: ${totalCount} người`;
+            }
+
+            if (adminListEl) {
+                adminListEl.innerHTML = '';
+                if (list.length === 0) {
+                    adminListEl.innerHTML = '<li class="text-gray-400 italic">Chưa có ai tham gia.</li>';
+                } else {
+                    list.forEach((p, idx) => {
+                        const li = document.createElement('li');
+                        const statusBadge = p.connected
+                            ? '<span class="text-xs font-semibold text-green-700 bg-green-100 px-2 py-0.5 rounded">Đang online</span>'
+                            : '<span class="text-xs font-semibold text-amber-800 bg-amber-100 px-2 py-0.5 rounded">Mất kết nối (xóa sau 30s)</span>';
+                        const roleBadge = p.role === 'admin'
+                            ? '<span class="text-xs font-bold text-red-600 ml-1">[Quản trò]</span>'
+                            : '';
+
+                        li.className = "p-2.5 bg-gray-50 rounded border flex justify-between items-center gap-2";
+                        li.innerHTML = `
+                            <div>
+                                <div class="font-bold text-gray-800">#${idx + 1}. ${escapeHtml(p.name)}${roleBadge}</div>
+                                <div class="text-xs text-gray-500">Đăng nhập lúc: <span class="font-mono font-semibold">${formatLoginTime(p.joinedAt)}</span></div>
+                            </div>
+                            <div>${statusBadge}</div>
+                        `;
+                        adminListEl.appendChild(li);
+                    });
+                }
+            }
+
+            if (playerListEl) {
+                playerListEl.innerHTML = '';
+                if (list.length === 0) {
+                    playerListEl.innerHTML = '<li class="text-gray-400 italic">Chưa có ai tham gia.</li>';
+                } else {
+                    list.forEach((p, idx) => {
+                        const li = document.createElement('li');
+                        const statusText = p.connected
+                            ? '<span class="text-green-600 font-semibold text-xs">Online</span>'
+                            : '<span class="text-amber-600 font-semibold text-xs">Mất kết nối</span>';
+
+                        li.className = "p-2 bg-gray-50 rounded border flex justify-between items-center gap-2";
+                        li.innerHTML = `
+                            <div>
+                                <span class="font-bold">#${idx + 1}</span> ${escapeHtml(p.name)}
+                                <span class="text-xs text-gray-500 ml-2">(${formatLoginTime(p.joinedAt)})</span>
+                            </div>
+                            <div>${statusText}</div>
+                        `;
+                        playerListEl.appendChild(li);
+                    });
+                }
+            }
+        }
+
         function login() {
             const name = document.getElementById('username').value.trim();
             if (!name) return alert('Vui lòng nhập tên của bạn!');
@@ -435,12 +538,15 @@
                 document.getElementById('player-panel').classList.remove('hidden');
                 document.getElementById('admin-panel').classList.add('hidden');
             }
+
+            if (currentGameState && currentGameState.participants) {
+                renderParticipants(currentGameState.participants);
+            }
         });
 
         socket.on('state_update', (state) => {
             const newQueueLength = Array.isArray(state.queue) ? state.queue.length : 0;
 
-            // Play sound ONLY on admin's device whenever a new player buzzes in
             if (currentUser && currentUser.role === 'admin' && newQueueLength > previousQueueLength) {
                 playBuzzerSound();
             }
@@ -477,6 +583,8 @@
                     }, 30);
                 }
             }
+
+            renderParticipants(state.participants);
 
             if (currentUser && currentUser.role === 'admin') {
                 document.getElementById('mode-select').value = state.mode;
