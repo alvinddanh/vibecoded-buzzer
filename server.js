@@ -142,6 +142,13 @@ io.on('connection', (socket) => {
             case 'clear_queue':
                 gameState.queue = [];
                 break;
+            case 'clear_and_unlock':
+                gameState.queue = [];
+                gameState.isLocked = false;
+                clearTimeout(lockTimeout);
+                gameState.unlockedAt = Date.now();
+                gameState.endTime = null;
+                break;
             case 'start_timer': {
                 const durationMs = data.seconds * 1000;
                 gameState.isLocked = false;
