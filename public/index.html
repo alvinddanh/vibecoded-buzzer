@@ -85,6 +85,34 @@
                     <button onclick="toggleLock(true)" class="flex-1 bg-red-500 text-white py-2 rounded font-bold">Khóa</button>
                 </div>
                 <button onclick="clearQueue()" class="w-full bg-gray-500 text-white py-2 rounded mt-4 font-bold">Xóa kết quả</button>
+
+                <hr class="my-4">
+
+                <!-- CÀI ĐẶT ÂM THANH CHUÔNG (CHỈ DÀNH CHO ADMIN) -->
+                <h3 class="font-bold text-lg mb-3">Âm thanh chuông (Admin)</h3>
+                <select id="buzzer-sound-mode" onchange="handleSoundModeChange()" class="w-full border p-2 rounded mb-3">
+                    <option value="default">Default (Built-in)</option>
+                    <option value="none">No Sound</option>
+                    <option value="custom">Custom Upload (.wav)</option>
+                </select>
+
+                <input
+                    type="file"
+                    id="wav-file-input"
+                    accept=".wav,audio/wav,audio/wave,audio/x-wav"
+                    onchange="handleWavUpload(event)"
+                    class="hidden"
+                />
+
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="triggerWavPicker()" class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-3 py-2 rounded font-bold transition-colors">
+                        Chọn file .wav
+                    </button>
+                    <button type="button" onclick="playBuzzerSound()" class="bg-gray-800 hover:bg-gray-900 text-white text-sm px-3 py-2 rounded font-bold transition-colors">
+                        Nghe thử
+                    </button>
+                </div>
+                <p id="wav-file-status" class="text-xs text-gray-500 mt-2 truncate">Đang dùng: Âm thanh mặc định (Web Audio)</p>
             </div>
 
             <!-- KẾT QUẢ CHO ADMIN -->
@@ -143,7 +171,176 @@
         let currentUser = null;
         let currentGameState = null;
         let localTimerInterval = null;
-        let currentRenderedOptions = ""; 
+        let currentRenderedOptions = "";
+        let previousQueueLength = 0;
+
+        // ==========================================
+        // ADMIN-ONLY SOUND ENGINE (Web Audio API)
+        // ==========================================
+        const SOUND_MODE_KEY = 'admin_buzzer_sound_mode';
+        const WAV_NAME_KEY = 'admin_buzzer_wav_name';
+
+        let audioCtx = null;
+        let customWavBuffer = null; // Pre-decoded AudioBuffer for instant playback
+        let adminSoundMode = localStorage.getItem(SOUND_MODE_KEY) || 'default'; // 'default' | 'none' | 'custom'
+        let customWavFileName = localStorage.getItem(WAV_NAME_KEY) || '';
+
+        function getAudioContext() {
+            if (!audioCtx) {
+                const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                if (AudioContextClass) {
+                    audioCtx = new AudioContextClass();
+                }
+            }
+            if (audioCtx && audioCtx.state === 'suspended') {
+                audioCtx.resume().catch(() => {});
+            }
+            return audioCtx;
+        }
+
+        // Built-in synthesized buzzer sound using Web Audio API (no external file needed)
+        function playDefaultBuiltinBuzzer() {
+            const ctx = getAudioContext();
+            if (!ctx) return;
+
+            const now = ctx.currentTime;
+
+            // Dual-oscillator buzzer tone for crisp, unmistakable alert
+            const osc1 = ctx.createOscillator();
+            const osc2 = ctx.createOscillator();
+            const gain = ctx.createGain();
+
+            osc1.type = 'sawtooth';
+            osc2.type = 'square';
+
+            osc1.frequency.setValueAtTime(220, now);
+            osc1.frequency.exponentialRampToValueAtTime(165, now + 0.35);
+
+            osc2.frequency.setValueAtTime(440, now);
+            osc2.frequency.exponentialRampToValueAtTime(330, now + 0.35);
+
+            gain.gain.setValueAtTime(0.001, now);
+            gain.gain.linearRampToValueAtTime(0.22, now + 0.015);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.38);
+
+            osc1.connect(gain);
+            osc2.connect(gain);
+            gain.connect(ctx.destination);
+
+            osc1.start(now);
+            osc2.start(now);
+            osc1.stop(now + 0.4);
+            osc2.stop(now + 0.4);
+        }
+
+        function playCustomWavBuffer() {
+            if (!customWavBuffer) return false;
+            const ctx = getAudioContext();
+            if (!ctx) return false;
+
+            const source = ctx.createBufferSource();
+            source.buffer = customWavBuffer;
+            source.connect(ctx.destination);
+            source.start(0);
+            return true;
+        }
+
+        function playBuzzerSound() {
+            // Strictly only for admin
+            if (!currentUser || currentUser.role !== 'admin') return;
+            if (adminSoundMode === 'none') return;
+
+            if (adminSoundMode === 'custom') {
+                const played = playCustomWavBuffer();
+                if (!played) {
+                    // Fallback to built-in sound if page was refreshed and .wav needs re-selection
+                    playDefaultBuiltinBuzzer();
+                }
+                return;
+            }
+
+            playDefaultBuiltinBuzzer();
+        }
+
+        function updateSoundUI() {
+            const modeSelect = document.getElementById('buzzer-sound-mode');
+            const statusEl = document.getElementById('wav-file-status');
+            if (!modeSelect || !statusEl) return;
+
+            modeSelect.value = adminSoundMode;
+
+            if (adminSoundMode === 'none') {
+                statusEl.innerText = 'Đang tắt âm thanh (No Sound)';
+            } else if (adminSoundMode === 'custom') {
+                if (customWavBuffer && customWavFileName) {
+                    statusEl.innerText = `Đang dùng .wav: ${customWavFileName}`;
+                } else if (customWavFileName) {
+                    statusEl.innerText = `Cần chọn lại .wav (${customWavFileName}) sau khi tải lại trang`;
+                } else {
+                    statusEl.innerText = 'Chưa chọn file .wav';
+                }
+            } else {
+                statusEl.innerText = 'Đang dùng: Âm thanh mặc định (Web Audio)';
+            }
+        }
+
+        function setAdminSoundMode(mode) {
+            if (!['default', 'none', 'custom'].includes(mode)) return;
+            adminSoundMode = mode;
+            localStorage.setItem(SOUND_MODE_KEY, mode);
+            updateSoundUI();
+        }
+
+        function triggerWavPicker() {
+            if (!currentUser || currentUser.role !== 'admin') return;
+            getAudioContext();
+            document.getElementById('wav-file-input').click();
+        }
+
+        function handleSoundModeChange() {
+            if (!currentUser || currentUser.role !== 'admin') return;
+            getAudioContext();
+            const selected = document.getElementById('buzzer-sound-mode').value;
+            if (selected === 'custom' && !customWavBuffer) {
+                document.getElementById('wav-file-input').click();
+                return;
+            }
+            setAdminSoundMode(selected);
+        }
+
+        async function handleWavUpload(event) {
+            const file = event.target.files?.[0];
+            if (!file) {
+                updateSoundUI();
+                return;
+            }
+
+            const isWav = file.name.toLowerCase().endsWith('.wav') ||
+                ['audio/wav', 'audio/wave', 'audio/x-wav'].includes(file.type);
+
+            if (!isWav) {
+                alert('Vui lòng chọn file định dạng .wav!');
+                event.target.value = '';
+                updateSoundUI();
+                return;
+            }
+
+            try {
+                const ctx = getAudioContext();
+                const arrayBuffer = await file.arrayBuffer();
+                customWavBuffer = await ctx.decodeAudioData(arrayBuffer);
+                customWavFileName = file.name;
+                localStorage.setItem(WAV_NAME_KEY, file.name);
+                setAdminSoundMode('custom');
+                playBuzzerSound();
+            } catch (err) {
+                console.error('Lỗi giải mã file .wav:', err);
+                alert('Không thể đọc file .wav này.');
+                updateSoundUI();
+            } finally {
+                event.target.value = '';
+            }
+        }
 
         function login() {
             const name = document.getElementById('username').value.trim();
@@ -162,6 +359,8 @@
                 document.getElementById('user-role').classList.replace('text-gray-500', 'text-red-600');
                 document.getElementById('admin-panel').classList.remove('hidden');
                 document.getElementById('player-panel').classList.add('hidden');
+                getAudioContext();
+                updateSoundUI();
             } else {
                 document.getElementById('user-role').innerText = 'THÍ SINH';
                 document.getElementById('player-panel').classList.remove('hidden');
@@ -170,6 +369,14 @@
         });
 
         socket.on('state_update', (state) => {
+            const newQueueLength = Array.isArray(state.queue) ? state.queue.length : 0;
+
+            // Play sound ONLY on admin's device whenever a new player buzzes in
+            if (currentUser && currentUser.role === 'admin' && newQueueLength > previousQueueLength) {
+                playBuzzerSound();
+            }
+            previousQueueLength = newQueueLength;
+
             currentGameState = state;
             const timeOffset = state.serverTime ? (state.serverTime - Date.now()) : 0; 
             
