@@ -164,7 +164,7 @@
                     <textarea id="admin-text-box" readonly class="w-full h-28 border-2 border-gray-200 p-3 rounded font-mono text-sm focus:outline-none bg-gray-50 resize-none" placeholder="Kết quả sẽ hiện ở đây..."></textarea>
                 </div>
 
-                <!-- DANH SÁCH NGƯỜI ĐANG THAM GIA (ADMIN) -->
+                <!-- DANH SÁCH THÍ SINH ĐANG THAM GIA (ADMIN) -->
                 <div class="bg-white p-6 rounded shadow">
                     <div class="flex justify-between items-center mb-3">
                         <h3 class="font-bold text-lg">Danh sách đang tham gia</h3>
@@ -206,7 +206,7 @@
                 <ul id="player-queue" class="text-sm space-y-1"></ul>
             </div>
 
-            <!-- DANH SÁCH NGƯỜI ĐANG THAM GIA (NGƯỜI CHƠI) -->
+            <!-- DANH SÁCH THÍ SINH ĐANG THAM GIA (NGƯỜI CHƠI) -->
             <div class="mt-8 w-full max-w-md">
                 <div class="flex justify-between items-center mb-2 border-b pb-1">
                     <h4 class="font-bold text-gray-600">Danh sách đang tham gia:</h4>
@@ -447,7 +447,9 @@
         }
 
         function renderParticipants(participants) {
-            const list = Array.isArray(participants) ? participants : [];
+            const list = Array.isArray(participants)
+                ? participants.filter(p => p.role !== 'admin')
+                : [];
             const totalCount = list.length;
 
             const adminCountEl = document.getElementById('admin-participants-count');
@@ -465,21 +467,18 @@
             if (adminListEl) {
                 adminListEl.innerHTML = '';
                 if (list.length === 0) {
-                    adminListEl.innerHTML = '<li class="text-gray-400 italic">Chưa có ai tham gia.</li>';
+                    adminListEl.innerHTML = '<li class="text-gray-400 italic">Chưa có thí sinh nào tham gia.</li>';
                 } else {
                     list.forEach((p, idx) => {
                         const li = document.createElement('li');
                         const statusBadge = p.connected
                             ? '<span class="text-xs font-semibold text-green-700 bg-green-100 px-2 py-0.5 rounded">Đang online</span>'
                             : '<span class="text-xs font-semibold text-amber-800 bg-amber-100 px-2 py-0.5 rounded">Mất kết nối (xóa sau 30s)</span>';
-                        const roleBadge = p.role === 'admin'
-                            ? '<span class="text-xs font-bold text-red-600 ml-1">[Quản trò]</span>'
-                            : '';
 
                         li.className = "p-2.5 bg-gray-50 rounded border flex justify-between items-center gap-2";
                         li.innerHTML = `
                             <div>
-                                <div class="font-bold text-gray-800">#${idx + 1}. ${escapeHtml(p.name)}${roleBadge}</div>
+                                <div class="font-bold text-gray-800">#${idx + 1}. ${escapeHtml(p.name)}</div>
                                 <div class="text-xs text-gray-500">Đăng nhập lúc: <span class="font-mono font-semibold">${formatLoginTime(p.joinedAt)}</span></div>
                             </div>
                             <div>${statusBadge}</div>
@@ -492,7 +491,7 @@
             if (playerListEl) {
                 playerListEl.innerHTML = '';
                 if (list.length === 0) {
-                    playerListEl.innerHTML = '<li class="text-gray-400 italic">Chưa có ai tham gia.</li>';
+                    playerListEl.innerHTML = '<li class="text-gray-400 italic">Chưa có thí sinh nào tham gia.</li>';
                 } else {
                     list.forEach((p, idx) => {
                         const li = document.createElement('li');

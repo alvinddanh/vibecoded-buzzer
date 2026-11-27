@@ -20,16 +20,18 @@ let gameState = {
     endTime: null,
     allowedOptions: 'ABCD',
     autoLockLimit: null,
-    participants: [] // { id, name, role, joinedAt, connected, disconnectedAt }
+    participants: [] // Chỉ lưu danh sách thí sinh (role === 'player')
 };
 
 let lockTimeout = null;
-const disconnectTimers = new Map(); // key: participant name -> timeoutId
+const disconnectTimers = new Map(); // key: player name -> timeoutId
 
 // Hàm hỗ trợ để luôn gửi kèm thời gian thực của server
 function broadcastState(target = io) {
+    const publicParticipants = gameState.participants.filter(p => p.role !== 'admin');
     target.emit('state_update', {
         ...gameState,
+        participants: publicParticipants,
         serverTime: Date.now()
     });
 }
@@ -51,10 +53,14 @@ io.on('connection', (socket) => {
         const cleanName = String(name || '').trim();
         if (!cleanName) return;
 
-        const role = cleanName === "admin000" ? 'admin' : 'player';
-        const now = Date.now();
+        if (cleanName === "admin000") {
+            socket.data.role = 'admin';
+            socket.emit('login_success', { role: 'admin', name: cleanName });
+            console.log(`[+] Quản trò đã tham gia: ${cleanName}`);
+            return;
+        }
 
-        // Nếu đang có timer xóa do disconnect trước đó thì hủy đi
+        const now = Date.now();
         if (disconnectTimers.has(cleanName)) {
             clearTimeout(disconnectTimers.get(cleanName));
             disconnectTimers.delete(cleanName);
@@ -66,44 +72,44 @@ io.on('connection', (socket) => {
             gameState.participants[existingIndex] = {
                 ...prev,
                 id: socket.id,
-                role,
+                role: 'player',
                 connected: true,
                 disconnectedAt: null
-                // Giữ nguyên joinedAt gốc của phiên đăng nhập, hoặc cập nhật nếu muốn
             };
         } else {
             gameState.participants.push({
                 id: socket.id,
                 name: cleanName,
-                role,
+                role: 'player',
                 joinedAt: now,
                 connected: true,
                 disconnectedAt: null
             });
         }
 
+        socket.data.role = 'player';
         socket.data.userName = cleanName;
-        socket.emit('login_success', { role, name: cleanName });
-        console.log(`[+] ${role === 'admin' ? 'Quản trò' : 'Người chơi'} đã tham gia: ${cleanName}`);
+        socket.emit('login_success', { role: 'player', name: cleanName });
+        console.log(`[+] Người chơi đã tham gia: ${cleanName}`);
 
         broadcastState();
     });
 
     socket.on('disconnect', () => {
+        if (socket.data.role === 'admin') return;
+
         const userName = socket.data.userName;
         if (!userName) return;
 
         const participant = gameState.participants.find(p => p.name === userName);
         if (!participant) return;
 
-        // Chỉ xử lý nếu socket ngắt kết nối là socket hiện tại của người đó
         if (participant.id !== socket.id) return;
 
         participant.connected = false;
         participant.disconnectedAt = Date.now();
         broadcastState();
 
-        // Hẹn giờ 30 giây: nếu quá 30s chưa kết nối lại thì xóa khỏi danh sách
         if (disconnectTimers.has(userName)) {
             clearTimeout(disconnectTimers.get(userName));
         }
