@@ -14,18 +14,19 @@ let gameState = {
     isLocked: true,
     mode: 'buzzer_only',
     queue: [],
-    unlockedAt: null, 
+    unlockedAt: null,
     endTime: null,
-    allowedOptions: 'ABCD'
+    allowedOptions: 'ABCD',
+    autoLockLimit: null // null = không tự khóa theo số người; số nguyên >= 1 = tự khóa khi đủ N người
 };
 
 let lockTimeout = null;
 
 // Hàm hỗ trợ để luôn gửi kèm thời gian thực của server
 function broadcastState(target = io) {
-    target.emit('state_update', { 
-        ...gameState, 
-        serverTime: Date.now() 
+    target.emit('state_update', {
+        ...gameState,
+        serverTime: Date.now()
     });
 }
 
@@ -50,7 +51,7 @@ io.on('connection', (socket) => {
                 if (data.allowedOptions) gameState.allowedOptions = data.allowedOptions;
                 gameState.queue = [];
                 break;
-            case 'update_options': 
+            case 'update_options':
                 gameState.allowedOptions = data.allowedOptions;
                 break;
             case 'toggle_lock':
@@ -64,26 +65,42 @@ io.on('connection', (socket) => {
             case 'clear_queue':
                 gameState.queue = [];
                 break;
-            case 'start_timer':
+            case 'start_timer': {
                 const durationMs = data.seconds * 1000;
                 gameState.isLocked = false;
                 gameState.queue = [];
                 gameState.unlockedAt = Date.now();
                 gameState.endTime = gameState.unlockedAt + durationMs;
-                
+
                 clearTimeout(lockTimeout);
                 lockTimeout = setTimeout(() => {
                     gameState.isLocked = true;
                     broadcastState(); // Khóa xong thì báo cho mọi người
                 }, durationMs);
                 break;
+            }
+            case 'set_auto_lock_limit': {
+                const parsed = parseInt(data.limit, 10);
+                gameState.autoLockLimit = Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+
+                // Nếu đang mở chuông mà số người đã bấm >= N mới đặt thì khóa luôn
+                if (
+                    !gameState.isLocked &&
+                    gameState.autoLockLimit !== null &&
+                    gameState.queue.length >= gameState.autoLockLimit
+                ) {
+                    gameState.isLocked = true;
+                    clearTimeout(lockTimeout);
+                }
+                break;
+            }
         }
         broadcastState(); // Cập nhật sau mọi hành động của admin
     });
 
     socket.on('buzz', (playerData) => {
         if (gameState.isLocked) return;
-        
+
         const alreadyBuzzed = gameState.queue.find(p => p.name === playerData.name);
         if (!alreadyBuzzed) {
             let timeTaken = "0.00";
@@ -96,10 +113,20 @@ io.on('connection', (socket) => {
                 time: timeTaken
             });
             gameState.queue.sort((a, b) => parseFloat(a.time) - parseFloat(b.time));
+
+            // Tự động khóa chuông khi đủ đúng N người bấm
+            if (
+                gameState.autoLockLimit !== null &&
+                gameState.queue.length >= gameState.autoLockLimit
+            ) {
+                gameState.isLocked = true;
+                clearTimeout(lockTimeout);
+            }
+
             broadcastState();
         }
     });
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Hệ thống đang chạy tại http://localhost:${PORT}`));
+server.listen(PORT, () => console.log

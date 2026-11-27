@@ -79,11 +79,46 @@
 
                 <hr class="my-4">
 
-                <h3 class="font-bold text-lg mb-4">Khóa thủ công</h3>
+                <h3 class="font-bold text-lg mb-4">Khóa thủ công & Tự khóa</h3>
                 <div class="flex gap-2">
                     <button onclick="toggleLock(false)" class="flex-1 bg-blue-500 text-white py-2 rounded font-bold">Mở Khóa</button>
                     <button onclick="toggleLock(true)" class="flex-1 bg-red-500 text-white py-2 rounded font-bold">Khóa</button>
                 </div>
+
+                <div class="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                    <label for="auto-lock-input" class="block text-sm font-bold text-amber-900 mb-2">
+                        Tự động khóa sau khi có đúng N người bấm:
+                    </label>
+                    <div class="flex gap-2">
+                        <input
+                            type="number"
+                            id="auto-lock-input"
+                            min="1"
+                            step="1"
+                            placeholder="VD: 3"
+                            class="border p-2 rounded w-full focus:outline-none focus:border-amber-500 font-mono font-bold"
+                        />
+                        <button
+                            type="button"
+                            onclick="setAutoLockLimit()"
+                            class="bg-amber-600 hover:bg-amber-700 text-white px-4 rounded font-bold whitespace-nowrap transition-colors"
+                        >
+                            Áp dụng
+                        </button>
+                        <button
+                            type="button"
+                            id="clear-auto-lock-btn"
+                            onclick="clearAutoLockLimit()"
+                            class="hidden bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 rounded font-bold whitespace-nowrap transition-colors"
+                        >
+                            Tắt
+                        </button>
+                    </div>
+                    <p id="auto-lock-status" class="text-xs text-amber-800 mt-2 font-semibold">
+                        Đang tắt tự khóa theo số người.
+                    </p>
+                </div>
+
                 <button onclick="clearQueue()" class="w-full bg-gray-500 text-white py-2 rounded mt-4 font-bold">Xóa kết quả</button>
 
                 <hr class="my-4">
@@ -205,7 +240,6 @@
 
             const now = ctx.currentTime;
 
-            // Dual-oscillator buzzer tone for crisp, unmistakable alert
             const osc1 = ctx.createOscillator();
             const osc2 = ctx.createOscillator();
             const gain = ctx.createGain();
@@ -253,7 +287,6 @@
             if (adminSoundMode === 'custom') {
                 const played = playCustomWavBuffer();
                 if (!played) {
-                    // Fallback to built-in sound if page was refreshed and .wav needs re-selection
                     playDefaultBuiltinBuzzer();
                 }
                 return;
@@ -342,6 +375,42 @@
             }
         }
 
+        // ==========================================
+        // AUTO-LOCK AFTER N PLAYERS
+        // ==========================================
+        function setAutoLockLimit() {
+            const input = document.getElementById('auto-lock-input');
+            const n = parseInt(input.value, 10);
+            if (!Number.isInteger(n) || n < 1) {
+                return alert('Vui lòng nhập số N nguyên lớn hơn hoặc bằng 1!');
+            }
+            socket.emit('admin_action', { action: 'set_auto_lock_limit', limit: n });
+        }
+
+        function clearAutoLockLimit() {
+            document.getElementById('auto-lock-input').value = '';
+            socket.emit('admin_action', { action: 'set_auto_lock_limit', limit: null });
+        }
+
+        function syncAutoLockUI(limit, currentCount) {
+            const input = document.getElementById('auto-lock-input');
+            const clearBtn = document.getElementById('clear-auto-lock-btn');
+            const statusEl = document.getElementById('auto-lock-status');
+            if (!input || !clearBtn || !statusEl) return;
+
+            if (document.activeElement !== input) {
+                input.value = limit ? String(limit) : '';
+            }
+
+            if (limit) {
+                clearBtn.classList.remove('hidden');
+                statusEl.innerText = `Đang bật: Tự khóa khi đủ ${limit} người (hiện có ${currentCount}/${limit}).`;
+            } else {
+                clearBtn.classList.add('hidden');
+                statusEl.innerText = 'Đang tắt tự khóa theo số người.';
+            }
+        }
+
         function login() {
             const name = document.getElementById('username').value.trim();
             if (!name) return alert('Vui lòng nhập tên của bạn!');
@@ -418,6 +487,7 @@
                 } else {
                     document.getElementById('dynamic-keys-setting').classList.add('hidden');
                 }
+                syncAutoLockUI(state.autoLockLimit, newQueueLength);
                 renderAdminQueue(state.queue);
             }
 
